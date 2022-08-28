@@ -64,6 +64,7 @@ struct Token {
     pub function: Option<String>,
 }
 
+
 impl Token {
     pub fn new_number(number: f32) -> Self {
         Self {
@@ -187,7 +188,7 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
     //(\+|\-|\*|/|\(|\)))
     //this is for words(which are function names)
     //([a-z]+)
-    let reg_ex = Regex::new(r"((([0-9])+(\.[0-9]+)?)|(\+|\-|\*|/|\(|\)))|([a-z]+)")
+    let reg_ex = Regex::new(r"((\d)+(\.\d+)?)|([+-/*()])|([a-z]+)")
         .map_err(|e| e.to_string())?;
     let matches = reg_ex.find_iter(input.as_str());
     for token in matches {
