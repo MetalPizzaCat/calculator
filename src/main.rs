@@ -325,6 +325,19 @@ fn make_tree(input: &Vec<Token>) -> Option<Node> {
     nodes.pop()
 }
 
+fn get_operation_token(input: String) -> Result<Option<Token>, String> {
+    if input != "(" && input != ")" && input != "," {
+        if let Ok(operation) = OperationType::from_str(&input) {
+            return Ok(Some(Token::new_operation(operation)));
+        } else if FUNCTIONS.contains_key(&input) {
+            return Ok(Some(Token::new_function(input)));
+        } else {
+            return Err("Invalid operation".to_owned());
+        }
+    }
+    Ok(None)
+}
+
 fn parse(input: &String) -> Result<Vec<Token>, String> {
     let mut result: Vec<Token> = Vec::new();
     let mut out: Vec<String> = Vec::new();
@@ -345,18 +358,18 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
         let val = token.as_str();
         //println!("{}", token.as_str());
         if let Ok(num) = token.as_str().parse::<f32>() {
-            println!("{}", token.as_str());
+            //println!("{}", token.as_str());
             result.push(Token::new_number(num));
             continue;
         }
         if CONSTANTS.contains_key(&token.as_str().to_owned()) {
-            println!("{}", token.as_str());
+            //println!("{}", token.as_str());
             result.push(Token::new_number(CONSTANTS[&token.as_str().to_owned()]));
             continue;
         }
         if var_regex.is_match(&token.as_str()) {
             result.push(Token::new_variable(token.as_str().to_owned()));
-            println!("{}", token.as_str());
+            //println!("{}", token.as_str());
             continue;
         }
         match token.as_str() {
@@ -374,12 +387,10 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
                         }
                         break;
                     }
-                    println!("{}", op);
-                    if let Ok(operation) = OperationType::from_str(&op) {
-                        result.push(Token::new_operation(operation));
-                    } else {
-                        return Err("Invalid operation".to_owned());
+                    if let Some(token) = get_operation_token(op)? {
+                        result.push(token)
                     }
+                    //println!("{}", op);
                 }
             }
             _ => {
@@ -394,14 +405,9 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
                         stack.push(op);
                         break;
                     }
-                    println!("{}", op);
-
-                    if let Ok(operation) = OperationType::from_str(&op) {
-                        result.push(Token::new_operation(operation));
-                    } else {
-                        return Err("Invalid operation".to_owned());
+                    if let Some(token) = get_operation_token(op)? {
+                        result.push(token)
                     }
-                    out.push(op);
                 }
                 stack.push(token.as_str().to_owned());
             }
@@ -431,3 +437,4 @@ fn main() {
         //println!("Tree! {}", output);
     }
 }
+//($a = 2 * max((2*3),1))
