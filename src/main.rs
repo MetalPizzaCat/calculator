@@ -35,13 +35,25 @@ lazy_static! {
         ("min".to_owned(),2),
         ("cos".to_owned(),1)
     };
+
+    //simple list for converting symbols to u8
+    static ref PRIORITIES: HashMap<String, u8> = map! {
+        ("+".to_owned(),   2),
+        ("-".to_owned(),   2),
+        ("*".to_owned(),   3),
+        ("/".to_owned(),   3),
+        ("(".to_owned(),   4),
+        (")".to_owned(),   4),
+        ("let".to_owned(), 1),
+        ("=".to_owned(),   0)
+    };
 }
 
 #[derive(Clone, Copy)]
 enum TokenType {
     Number,
     Function,
-    Constant,
+    Variable,
     Operation,
 }
 
@@ -51,6 +63,8 @@ enum OperationType {
     Sub,
     Mul,
     Div,
+    Assign,
+    Create,
 }
 
 impl FromStr for OperationType {
@@ -61,6 +75,8 @@ impl FromStr for OperationType {
             "Sub" | "-" | "sub" => Ok(OperationType::Sub),
             "Mul" | "*" | "mul" => Ok(OperationType::Mul),
             "Div" | "/" | "div" => Ok(OperationType::Div),
+            "Assign" | "=" | "assign" => Ok(OperationType::Assign),
+            "Create" | "let" | "create" => Ok(OperationType::Create),
             _ => Err("Invalid enum string passed".to_owned()),
         }
     }
@@ -71,73 +87,165 @@ struct Token {
     pub token_type: TokenType,
     pub number: Option<f32>,
     pub operation: Option<OperationType>,
-    pub constant: Option<String>,
+    pub variable: Option<String>,
     pub function: Option<String>,
 }
 
 struct Node {
-    pub left: Option<Box<Node>>,
-    pub right: Option<Box<Node>>,
+    pub children: Vec<Node>,
     pub token: Token,
 }
 
+struct State {
+    pub variables: HashMap<String, f32>,
+}
+
+impl State {
+    pub fn new() -> Self {
+        Self {
+            variables: HashMap::new(),
+        }
+    }
+}
+
 impl Node {
-    pub fn get_value(&self) -> Option<f32> {
+    /**Get value of the child node by index */
+    pub fn get_child_value(&self, index: usize, state: &mut State) -> Result<Option<f32>, String> {
+        if let Some(child) = self.children.get(index) {
+            let b = child;
+            return child.get_value(state);
+        }
+        Err("No child node with given index".to_owned())
+    }
+
+    /**Executes every children node
+     * This is used for nodes that are not supposed to have return types
+     * Like loop bodies
+     */
+    pub fn execute(&self, state: &mut State) {}
+
+    /**Recursively gets value for the node
+     *
+     */
+    pub fn get_value(&self, state: &mut State) -> Result<Option<f32>, String> {
         match &self.token.token_type {
             TokenType::Number => {
-                return self.token.number;
+                return Ok(self.token.number);
             }
             TokenType::Function => {
                 let mut result: f32 = 0.0;
                 match self.token.function.as_ref().unwrap().as_str() {
                     "sin" => {
-                        if let Some(a) = &self.right {
-                            return Some(a.get_value().unwrap().sin());
+                        if let Some(a) = &self.get_child_value(0, state)? {
+                            return Ok(Some(a.sin()));
                         }
                     }
                     "max" => {
-                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
-                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
-                        return Some(max!(*a, *b));
+                        if let Some(a) = self.get_child_value(0, state)? {
+                            if let Some(b) = self.get_child_value(1, state)? {
+                                return Ok(Some(max!(a, b)));
+                            }
+                        }
                     }
                     _ => {}
                 };
+            }
+            TokenType::Variable => {
+                if let Some(name) = &self.token.variable.as_ref() {
+                    if let Some(var) = state.variables.get(name.clone()) {
+                        return Ok(Some(*var));
+                    }
+                }
+                return Err("Variable was not present in the state".to_owned());
             }
             TokenType::Operation => {
                 let mut result: f32 = 0.0;
                 match self.token.operation.unwrap() {
                     OperationType::Add => {
-                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
-                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
-                        return Some(a + b);
+                        if let Some(a) = self.get_child_value(0, state)? {
+                            if let Some(b) = self.get_child_value(1, state)? {
+                                return Ok(Some(a + b));
+                            }
+                        }
                     }
                     OperationType::Div => {
-                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
-                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
-                        return Some(a / b);
+                        if let Some(a) = self.get_child_value(0, state)? {
+                            if let Some(b) = self.get_child_value(1, state)? {
+                                return Ok(Some(a / b));
+                            }
+                        }
                     }
                     OperationType::Mul => {
-                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
-                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
-                        return Some(a * b);
+                        if let Some(a) = self.get_child_value(0, state)? {
+                            if let Some(b) = self.get_child_value(1, state)? {
+                                return Ok(Some(a * b));
+                            }
+                        }
                     }
                     OperationType::Sub => {
-                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
-                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
-                        return Some(a - b);
+                        if let Some(a) = self.get_child_value(0, state)? {
+                            if let Some(b) = self.get_child_value(1, state)? {
+                                return Ok(Some(a - b));
+                            }
+                        }
                     }
-                    _ => return None,
+                    OperationType::Assign => {
+                        //this is an arrow
+                        if let Some(child) = self.children.get(0) {
+                            if matches!(child.token.token_type, TokenType::Variable) {
+                                if let Some(var_name) = &child.token.variable {
+                                    if let Some(value) = self.get_child_value(1, state)? {
+                                        if let Some(var) =
+                                            state.variables.get_mut(&var_name.clone())
+                                        {
+                                            *var = value;
+                                        } else {
+                                            state.variables.insert(var_name.clone(), value);
+                                        }
+                                    } else {
+                                        return Err(
+                                            "Right side of the operation has no value".to_owned()
+                                        );
+                                    }
+                                } else {
+                                    return Err("No variable info provided".to_owned());
+                                }
+                            }
+                        } else {
+                            return Err("Left side of the assignment operation much be a variable"
+                                .to_owned());
+                        }
+                    }
+                    OperationType::Create => {
+                        //this is an arrow
+                        if let Some(child) = self.children.get(0) {
+                            if matches!(child.token.token_type, TokenType::Variable) {
+                                if let Some(var_name) = &child.token.variable {
+                                    state.variables.insert(var_name.clone(), 0.0);
+                                }
+                            }
+                        }
+                        return Err("Need variable name to create a variable".to_owned());
+                    }
+                    _ => return Ok(None),
                 };
             }
             _ => {}
         }
-        None
+        Ok(None)
     }
 }
 
 impl Node {
-    pub fn new(left: Option<Box<Node>>, right: Option<Box<Node>>, token: Token) -> Self {
-        Self { left, right, token }
+    pub fn new(token: Token) -> Self {
+        Self {
+            children: Vec::new(),
+            token,
+        }
+    }
+
+    pub fn new_with(children: Vec<Node>, token: Token) -> Self {
+        Self { children, token }
     }
 }
 
@@ -147,7 +255,7 @@ impl Token {
             token_type: TokenType::Number,
             number: Some(number),
             operation: None,
-            constant: None,
+            variable: None,
             function: None,
         }
     }
@@ -156,17 +264,17 @@ impl Token {
             token_type: TokenType::Operation,
             number: None,
             operation: Some(op),
-            constant: None,
+            variable: None,
             function: None,
         }
     }
 
-    pub fn new_constant(name: String) -> Self {
+    pub fn new_variable(name: String) -> Self {
         Self {
-            token_type: TokenType::Constant,
+            token_type: TokenType::Variable,
             number: None,
             operation: None,
-            constant: Some(name),
+            variable: Some(name),
             function: None,
         }
     }
@@ -176,7 +284,7 @@ impl Token {
             token_type: TokenType::Function,
             number: None,
             operation: None,
-            constant: None,
+            variable: None,
             function: Some(name),
         }
     }
@@ -186,109 +294,38 @@ fn make_tree(input: &Vec<Token>) -> Option<Node> {
     let mut nodes: Vec<Node> = Vec::new();
     for token in input {
         match token.token_type {
-            TokenType::Constant => nodes.push(Node::new(None, None, token.clone())),
+            TokenType::Variable => nodes.push(Node::new(token.clone())),
             TokenType::Function => {
                 if let Some(func_name) = &token.function {
                     if let Some(arg_count) = FUNCTIONS.get(&func_name.clone()) {
                         if *arg_count == 1 {
                             let a: Node = nodes.pop().unwrap();
-                            nodes.push(Node::new(Some(Box::new(a)), None, token.clone()));
+                            nodes.push(Node::new_with(vec![a], token.clone()));
                         } else if *arg_count == 2 {
                             let a: Node = nodes.pop().unwrap();
                             let b: Node = nodes.pop().unwrap();
-                            nodes.push(Node::new(
-                                Some(Box::new(a)),
-                                Some(Box::new(b)),
-                                token.clone(),
-                            ));
+                            nodes.push(Node::new_with(vec![a, b], token.clone()));
                         }
                     }
                 }
             }
-            TokenType::Number => nodes.push(Node::new(None, None, token.clone())),
+            TokenType::Number => nodes.push(Node::new(token.clone())),
             TokenType::Operation => {
-                let a: Node = nodes.pop().unwrap();
-                let b: Node = nodes.pop().unwrap();
-                nodes.push(Node::new(
-                    Some(Box::new(a)),
-                    Some(Box::new(b)),
-                    token.clone(),
-                ));
+                if matches!(token.operation?, OperationType::Create) {
+                    let a: Node = nodes.pop().unwrap();
+                    nodes.push(Node::new_with(vec![a], token.clone()));
+                } else {
+                    let a: Node = nodes.pop().unwrap();
+                    let b: Node = nodes.pop().unwrap();
+                    nodes.push(Node::new_with(vec![b, a], token.clone()));
+                }
             }
         }
     }
     nodes.pop()
 }
 
-fn calculate(input: &Vec<Token>) -> Option<f32> {
-    let mut numbers: Vec<f32> = Vec::new();
-    for token in input {
-        match token.token_type {
-            TokenType::Constant => {
-                numbers.push(CONSTANTS[token.constant.as_ref().unwrap()]);
-            }
-            TokenType::Function => {
-                let mut result: f32 = 0.0;
-                match token.function.as_ref().unwrap().as_str() {
-                    "sin" => {
-                        let a = numbers.pop().unwrap();
-                        result = a.sin();
-                    }
-                    "max" => {
-                        let a = numbers.pop().unwrap();
-                        let b = numbers.pop().unwrap();
-                        result = max!(a, b);
-                    }
-                    _ => {}
-                };
-                numbers.push(result);
-            }
-            TokenType::Number => {
-                numbers.push(token.number.unwrap());
-            }
-            TokenType::Operation => {
-                let mut result: f32 = 0.0;
-                match token.operation.unwrap() {
-                    OperationType::Add => {
-                        let a = numbers.pop().unwrap();
-                        let b = numbers.pop().unwrap();
-                        result = a + b;
-                    }
-                    OperationType::Div => {
-                        let a = numbers.pop().unwrap();
-                        let b = numbers.pop().unwrap();
-                        result = a / b;
-                    }
-                    OperationType::Mul => {
-                        let a = numbers.pop().unwrap();
-                        let b = numbers.pop().unwrap();
-                        result = a * b;
-                    }
-                    OperationType::Sub => {
-                        let a = numbers.pop().unwrap();
-                        let b = numbers.pop().unwrap();
-                        result = a - b;
-                    }
-                    _ => {}
-                };
-                numbers.push(result);
-            }
-        }
-    }
-    numbers.pop()
-}
-
 fn parse(input: &String) -> Result<Vec<Token>, String> {
-    //simple list for converting symbols to u8
-    let priorities: HashMap<&str, u8> = map! {
-        ("+" ,  0),
-        ("-",   0),
-        ("*",   1),
-        ("/",   1),
-        ("(",   2),
-        (")",   2),
-    };
-
     let mut result: Vec<Token> = Vec::new();
     let mut out: Vec<String> = Vec::new();
     let mut stack: Vec<String> = Vec::new();
@@ -299,7 +336,10 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
     //(\+|\-|\*|/|\(|\)))
     //this is for words(which are function names)
     //([a-z]+)
-    let reg_ex = Regex::new(r"((\d)+(\.\d+)?)|([+-/*()])|([a-z]+)").map_err(|e| e.to_string())?;
+    //(==)|((\d)+(\.\d+)?)|([+-/*()=])|(\$?(\w+))
+    let reg_ex =
+        Regex::new(r"(==)|((\d)+(\.\d+)?)|([+-/*()=])|(\$?(\w+))").map_err(|e| e.to_string())?;
+    let var_regex = Regex::new(r"(\$(\w+))").map_err(|e| e.to_string())?;
     let matches = reg_ex.find_iter(input.as_str());
     for token in matches {
         let val = token.as_str();
@@ -311,7 +351,12 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
         }
         if CONSTANTS.contains_key(&token.as_str().to_owned()) {
             println!("{}", token.as_str());
-            result.push(Token::new_constant(token.as_str().to_owned()));
+            result.push(Token::new_number(CONSTANTS[&token.as_str().to_owned()]));
+            continue;
+        }
+        if var_regex.is_match(&token.as_str()) {
+            result.push(Token::new_variable(token.as_str().to_owned()));
+            println!("{}", token.as_str());
             continue;
         }
         match token.as_str() {
@@ -332,21 +377,30 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
                     println!("{}", op);
                     if let Ok(operation) = OperationType::from_str(&op) {
                         result.push(Token::new_operation(operation));
+                    } else {
+                        return Err("Invalid operation".to_owned());
                     }
                 }
             }
             _ => {
-                let priority: u8 = *priorities.get(token.as_str()).unwrap_or(&99);
+                let priority: u8 = *PRIORITIES.get(token.as_str()).unwrap_or(&99);
                 while let Some(op) = stack.pop() {
+                    let a = &op;
                     if FUNCTIONS.contains_key(&op)
                         || op == "("
                         || op == ")"
-                        || priorities[&op.as_str()] < priority
+                        || PRIORITIES[&op.as_str().to_owned()] < priority
                     {
                         stack.push(op);
                         break;
                     }
                     println!("{}", op);
+
+                    if let Ok(operation) = OperationType::from_str(&op) {
+                        result.push(Token::new_operation(operation));
+                    } else {
+                        return Err("Invalid operation".to_owned());
+                    }
                     out.push(op);
                 }
                 stack.push(token.as_str().to_owned());
@@ -358,16 +412,22 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
 
 fn main() {
     println!("Input equation: ");
+    let code: String = "(let $a = 3)
+    (let $b = max($a,3))
+    (out($b))
+    "
+    .to_owned();
+
     let input: String = text_io::read!("{}\n");
     let result = parse(&input).unwrap_or_else(|e| panic!("{}", e.to_string()));
-    if let Some(result) = calculate(&result) {
-        println!("Result :{}", result);
-    } else {
-        println!("Failed to execute");
-    }
 
     if let Some(tree) = make_tree(&result) {
         let c = &tree;
-        println!("Tree! {}", tree.get_value().unwrap());
+        let mut state: State = State::new();
+        let output = tree.get_value(&mut state);
+        for (name, value) in state.variables {
+            println!("{} : {}", name, value);
+        }
+        //println!("Tree! {}", output);
     }
 }
