@@ -19,8 +19,18 @@ impl Node {
     /**Executes every children node
      * This is used for nodes that are not supposed to have return types
      * Like loop bodies
+     * If a node that returns a value(such as math equation without assignment)
+     * then this value is treated as result of the block and execution stops
      */
-    pub fn execute(&self, state: &mut State) {}
+    pub fn execute(&self, state: &mut State) -> Result<Option<f32>, String> {
+        
+        for child in &self.children {
+            if let Some(result) = child.get_value(state)? {
+                return Ok(Some(result));
+            }
+        }
+        Ok(None)
+    }
 
     /**Recursively gets value for the node
      *
@@ -125,6 +135,7 @@ impl Node {
                     }
                 };
             }
+            _ => {/*ignore every other token because they will be used for other reasons */}
         }
         Ok(None)
     }

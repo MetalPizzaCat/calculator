@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 #[derive(Clone, Copy)]
 pub enum TokenType {
+    /**None token type is basically a tag for a function body, it can not be interpreted in any way */
+    None,
     /**This token is a simple constant value */
     Number,
     Function,
@@ -20,7 +22,7 @@ pub enum OperationType {
     /**Assignment to a variable */
     Assign,
     /**Creation of a new variable
-     * Currently not used, because 
+     * Currently not used, because
      * i have not figured out how to elegantly add this to the whole system
      */
     Create,
@@ -54,6 +56,16 @@ pub struct Token {
 }
 
 impl Token {
+    /**Creates a new token of None type */
+    pub fn new() -> Self {
+        Self {
+            token_type: TokenType::None,
+            number: None,
+            operation: None,
+            variable: None,
+            function: None,
+        }
+    }
     pub fn new_number(number: f32) -> Self {
         Self {
             token_type: TokenType::Number,

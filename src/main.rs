@@ -9,7 +9,7 @@ pub mod token;
 use parser::*;
 use state::*;
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("Input equation: ");
     let code: String = "(let $a = 3)
     (let $b = max($a,3))
@@ -17,16 +17,20 @@ fn main() {
     "
     .to_owned();
 
-    let input: String = text_io::read!("{}\n");
-    let result = parse_line(&input).unwrap_or_else(|e| panic!("{}", e.to_string()));
+    //let input: String = text_io::read!s"{}\n");
+    let input = "$a = 2; $b = 2 + $a*2;$c = max($a,$b);$a + 2".to_owned();
+    println!("{}", input);
+    let result = parse_block(&input).unwrap_or_else(|e| panic!("{}", e.to_string()));
 
-    if let Some(tree) = make_tree(&result) {
-        let mut state: State = State::new();
-        let output = tree.get_value(&mut state);
-        for (name, value) in state.variables {
-            println!("{} : {}", name, value);
-        }
-        //println!("Tree! {}", output);
+    let mut state: State = State::new();
+    if let Some(output) = result.execute(&mut state).map_err(|e| e.to_string())? {
+        println!("Program returned:  {}", output);
     }
+    println!("Variable state");
+    for (name, value) in state.variables {
+        println!("{} : {}", name, value);
+    }
+
+    Ok(())
 }
 //($a = 2 * max((2*3),1))

@@ -1,14 +1,14 @@
-/**
-    This file contains functions for converting text into memory structure that can be executed by the program
-    Few notes:
-    1) While converting into RPN then into tree could be skipped, this project is simply a build upon previous iterations
-    so i just reused parser that already worked
-    2) ???
-
- */
-use crate::token::*;
-use crate::node::*;
 use crate::config::*;
+use crate::node::*;
+/**
+   This file contains functions for converting text into memory structure that can be executed by the program
+   Few notes:
+   1) While converting into RPN then into tree could be skipped, this project is simply a build upon previous iterations
+   so i just reused parser that already worked
+   2) ???
+
+*/
+use crate::token::*;
 
 use std::str::FromStr;
 
@@ -45,6 +45,7 @@ pub fn make_tree(input: &Vec<Token>) -> Option<Node> {
                     nodes.push(Node::new_with(vec![b, a], token.clone()));
                 }
             }
+            _ => {/*idk */}
         }
     }
     nodes.pop()
@@ -138,4 +139,22 @@ pub fn parse_line(input: &String) -> Result<Vec<Token>, String> {
         }
     }
     Ok(result)
+}
+
+/**Converts every line into it's own node and returns "main" node with every line being it's own child
+ * Uses newline and ";" as line separator
+*/
+pub fn parse_block(block: &String) -> Result<Node, String> {
+    let mut root = Node::new(Token::new());
+    let lines: std::str::Split<&[char; 2]> = block.split(&['\n', ';']);
+    for line in lines {
+        //shadow previous line definition with "prepared" one
+        //we have to add () to whole line because this way algorithm doesn't need to treat end of line as special case
+        let line = "(".to_owned() + line + ")";
+        let tokens = parse_line(&line.to_owned())?;
+        if let Some(sub) = make_tree(&tokens) {
+            root.children.push(sub);
+        }
+    }
+    Ok(root)
 }
