@@ -23,11 +23,21 @@ macro_rules! max {
 }
 
 lazy_static! {
+    /**All of the mathematical constants that can be used in equation*/
     static ref CONSTANTS: HashMap<String, f32> = map! {
         ("pi".to_owned() , std::f32::consts::PI),
         ("e".to_owned() , std::f32::consts::E),
     };
+    /**All of the standard functions and how many arguments they have*/
+    static ref FUNCTIONS: HashMap<String, i32> = map! {
+        ("sin".to_owned() , 1),
+        ("max".to_owned() , 2),
+        ("min".to_owned(),2),
+        ("cos".to_owned(),1)
+    };
 }
+
+#[derive(Clone, Copy)]
 enum TokenType {
     Number,
     Function,
@@ -56,6 +66,7 @@ impl FromStr for OperationType {
     }
 }
 
+#[derive(Clone)]
 struct Token {
     pub token_type: TokenType,
     pub number: Option<f32>,
@@ -64,6 +75,71 @@ struct Token {
     pub function: Option<String>,
 }
 
+struct Node {
+    pub left: Option<Box<Node>>,
+    pub right: Option<Box<Node>>,
+    pub token: Token,
+}
+
+impl Node {
+    pub fn get_value(&self) -> Option<f32> {
+        match &self.token.token_type {
+            TokenType::Number => {
+                return self.token.number;
+            }
+            TokenType::Function => {
+                let mut result: f32 = 0.0;
+                match self.token.function.as_ref().unwrap().as_str() {
+                    "sin" => {
+                        if let Some(a) = &self.right {
+                            return Some(a.get_value().unwrap().sin());
+                        }
+                    }
+                    "max" => {
+                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
+                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
+                        return Some(max!(*a, *b));
+                    }
+                    _ => {}
+                };
+            }
+            TokenType::Operation => {
+                let mut result: f32 = 0.0;
+                match self.token.operation.unwrap() {
+                    OperationType::Add => {
+                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
+                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
+                        return Some(a + b);
+                    }
+                    OperationType::Div => {
+                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
+                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
+                        return Some(a / b);
+                    }
+                    OperationType::Mul => {
+                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
+                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
+                        return Some(a * b);
+                    }
+                    OperationType::Sub => {
+                        let a = &self.right.as_ref().unwrap().get_value().unwrap();
+                        let b = &self.left.as_ref().unwrap().get_value().unwrap();
+                        return Some(a - b);
+                    }
+                    _ => return None,
+                };
+            }
+            _ => {}
+        }
+        None
+    }
+}
+
+impl Node {
+    pub fn new(left: Option<Box<Node>>, right: Option<Box<Node>>, token: Token) -> Self {
+        Self { left, right, token }
+    }
+}
 
 impl Token {
     pub fn new_number(number: f32) -> Self {
@@ -106,8 +182,43 @@ impl Token {
     }
 }
 
-const FUNCTION_NAMES: [&str; 5] = ["sin", "max", "cos", "min", "pi"];
-const CONSTANT_NAMES: [&str; 2] = ["pi", "e"];
+fn make_tree(input: &Vec<Token>) -> Option<Node> {
+    let mut nodes: Vec<Node> = Vec::new();
+    for token in input {
+        match token.token_type {
+            TokenType::Constant => nodes.push(Node::new(None, None, token.clone())),
+            TokenType::Function => {
+                if let Some(func_name) = &token.function {
+                    if let Some(arg_count) = FUNCTIONS.get(&func_name.clone()) {
+                        if *arg_count == 1 {
+                            let a: Node = nodes.pop().unwrap();
+                            nodes.push(Node::new(Some(Box::new(a)), None, token.clone()));
+                        } else if *arg_count == 2 {
+                            let a: Node = nodes.pop().unwrap();
+                            let b: Node = nodes.pop().unwrap();
+                            nodes.push(Node::new(
+                                Some(Box::new(a)),
+                                Some(Box::new(b)),
+                                token.clone(),
+                            ));
+                        }
+                    }
+                }
+            }
+            TokenType::Number => nodes.push(Node::new(None, None, token.clone())),
+            TokenType::Operation => {
+                let a: Node = nodes.pop().unwrap();
+                let b: Node = nodes.pop().unwrap();
+                nodes.push(Node::new(
+                    Some(Box::new(a)),
+                    Some(Box::new(b)),
+                    token.clone(),
+                ));
+            }
+        }
+    }
+    nodes.pop()
+}
 
 fn calculate(input: &Vec<Token>) -> Option<f32> {
     let mut numbers: Vec<f32> = Vec::new();
@@ -188,8 +299,7 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
     //(\+|\-|\*|/|\(|\)))
     //this is for words(which are function names)
     //([a-z]+)
-    let reg_ex = Regex::new(r"((\d)+(\.\d+)?)|([+-/*()])|([a-z]+)")
-        .map_err(|e| e.to_string())?;
+    let reg_ex = Regex::new(r"((\d)+(\.\d+)?)|([+-/*()])|([a-z]+)").map_err(|e| e.to_string())?;
     let matches = reg_ex.find_iter(input.as_str());
     for token in matches {
         let val = token.as_str();
@@ -199,7 +309,7 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
             result.push(Token::new_number(num));
             continue;
         }
-        if CONSTANT_NAMES.contains(&token.as_str()) {
+        if CONSTANTS.contains_key(&token.as_str().to_owned()) {
             println!("{}", token.as_str());
             result.push(Token::new_constant(token.as_str().to_owned()));
             continue;
@@ -212,7 +322,7 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
                 while let Some(op) = stack.pop() {
                     if op == "(" {
                         if let Some(func) = stack.pop() {
-                            if FUNCTION_NAMES.contains(&func.as_str()) {
+                            if FUNCTIONS.contains_key(&func) {
                                 println!("{}", func);
                                 result.push(Token::new_function(func));
                             }
@@ -228,7 +338,7 @@ fn parse(input: &String) -> Result<Vec<Token>, String> {
             _ => {
                 let priority: u8 = *priorities.get(token.as_str()).unwrap_or(&99);
                 while let Some(op) = stack.pop() {
-                    if FUNCTION_NAMES.contains(&op.as_str())
+                    if FUNCTIONS.contains_key(&op)
                         || op == "("
                         || op == ")"
                         || priorities[&op.as_str()] < priority
@@ -254,5 +364,10 @@ fn main() {
         println!("Result :{}", result);
     } else {
         println!("Failed to execute");
+    }
+
+    if let Some(tree) = make_tree(&result) {
+        let c = &tree;
+        println!("Tree! {}", tree.get_value().unwrap());
     }
 }
