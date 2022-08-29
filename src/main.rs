@@ -18,7 +18,7 @@ fn main() {
     .to_owned();
 
     let input: String = text_io::read!("{}\n");
-    let result = parse(&input).unwrap_or_else(|e| panic!("{}", e.to_string()));
+    let result = parse_line(&input).unwrap_or_else(|e| panic!("{}", e.to_string()));
 
     if let Some(tree) = make_tree(&result) {
         let mut state: State = State::new();

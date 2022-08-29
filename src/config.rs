@@ -1,3 +1,7 @@
+/**
+ * This file is a simple config file for various minor things
+ * It's not done as external json simply because it is not meant to be changed
+ */
 use crate::macros::*;
 use std::{collections::HashMap};
 

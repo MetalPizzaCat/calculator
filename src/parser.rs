@@ -1,3 +1,11 @@
+/**
+    This file contains functions for converting text into memory structure that can be executed by the program
+    Few notes:
+    1) While converting into RPN then into tree could be skipped, this project is simply a build upon previous iterations
+    so i just reused parser that already worked
+    2) ???
+
+ */
 use crate::token::*;
 use crate::node::*;
 use crate::config::*;
@@ -6,6 +14,7 @@ use std::str::FromStr;
 
 use regex::Regex;
 
+/**Converts RPN into something that resembles abstract syntax tree */
 pub fn make_tree(input: &Vec<Token>) -> Option<Node> {
     let mut nodes: Vec<Node> = Vec::new();
     for token in input {
@@ -41,6 +50,7 @@ pub fn make_tree(input: &Vec<Token>) -> Option<Node> {
     nodes.pop()
 }
 
+/**Convert given string into operation token, ignoring special symbols */
 pub fn get_operation_token(input: String) -> Result<Option<Token>, String> {
     if input != "(" && input != ")" && input != "," {
         if let Ok(operation) = OperationType::from_str(&input) {
@@ -54,7 +64,8 @@ pub fn get_operation_token(input: String) -> Result<Option<Token>, String> {
     Ok(None)
 }
 
-pub fn parse(input: &String) -> Result<Vec<Token>, String> {
+/**Parses line into reverse polish notation */
+pub fn parse_line(input: &String) -> Result<Vec<Token>, String> {
     let mut result: Vec<Token> = Vec::new();
     let mut stack: Vec<String> = Vec::new();
     //This regex matches either any floating point number

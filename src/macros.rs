@@ -4,6 +4,7 @@ macro_rules! map {
         core::convert::From::from([$(($k, $v),)*])
     }};
 }
+
 macro_rules! max {
     ($x: expr) => ($x);
     ($x: expr, $($z: expr),+) => {{

@@ -2,9 +2,12 @@ use std::str::FromStr;
 
 #[derive(Clone, Copy)]
 pub enum TokenType {
+    /**This token is a simple constant value */
     Number,
     Function,
+    /**This token is a reference to a variable from the state */
     Variable,
+    /**This token is a math or assignment operation */
     Operation,
 }
 
@@ -14,7 +17,12 @@ pub enum OperationType {
     Sub,
     Mul,
     Div,
+    /**Assignment to a variable */
     Assign,
+    /**Creation of a new variable
+     * Currently not used, because 
+     * i have not figured out how to elegantly add this to the whole system
+     */
     Create,
 }
 
@@ -33,6 +41,9 @@ impl FromStr for OperationType {
     }
 }
 
+/**Token contains info about current object
+ * Such as type and info that is related to that type
+ */
 #[derive(Clone)]
 pub struct Token {
     pub token_type: TokenType,
